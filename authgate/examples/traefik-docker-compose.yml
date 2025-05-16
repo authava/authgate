@@ -1,0 +1,92 @@
+version: '3'
+
+services:
+  traefik:
+    image: traefik:v3.11
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=authgate
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d
+
+  # JSON file configuration example
+  authgate-json:
+    image: authgate:latest
+    volumes:
+      - ./authgate.json:/app/authgate.json
+    environment:
+      - RUST_LOG=info
+      - AUTHGATE_CONFIG_BACKEND=json
+      - AUTHGATE_CONFIG=/app/authgate.json
+      - AUTHGATE_CACHE_ENABLED=true
+      - AUTHGATE_CACHE_BACKEND=redis
+      - AUTHGATE_REDIS_URL=redis://redis:6379
+    depends_on:
+      - redis
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.authgate-json.loadbalancer.server.port=4181"
+      - "traefik.http.routers.authgate-json.rule=Host(`auth-json.example.com`)"
+      - "traefik.http.routers.authgate-json.entrypoints=web"
+
+  # PostgreSQL configuration example
+  authgate-postgres:
+    image: authgate:latest
+    environment:
+      - RUST_LOG=info
+      - AUTHGATE_CONFIG_BACKEND=postgres
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/authgate
+      - AUTHGATE_CACHE_ENABLED=true
+      - AUTHGATE_CACHE_BACKEND=redis
+      - AUTHGATE_REDIS_URL=redis://redis:6379
+      - AUTHGATE_ENABLE_ADMIN_API=true
+      - AUTHGATE_ADMIN_TOKEN=your-secure-admin-token
+      - AUTHGATE_SESSION_COOKIE=session
+      - AUTHGATE_ADMIN_SESSION_ROLES=admin,superuser
+    depends_on:
+      - redis
+      - postgres
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.services.authgate-postgres.loadbalancer.server.port=4181"
+      - "traefik.http.routers.authgate-postgres.rule=Host(`auth-postgres.example.com`)"
+      - "traefik.http.routers.authgate-postgres.entrypoints=web"
+
+  protected-app:
+    image: nginx:alpine
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`app.example.com`)"
+      - "traefik.http.routers.app.entrypoints=web"
+      - "traefik.http.routers.app.middlewares=authgate-json"
+      - "traefik.http.middlewares.authgate-json.forwardauth.address=http://authgate-json:4181/"
+      - "traefik.http.middlewares.authgate-json.forwardauth.authResponseHeaders=X-Auth-User-Id,X-Auth-User-Email,X-Auth-User-Roles,X-Auth-User-Permissions"
+
+volumes:
+  redis-data:
+  postgres-data:

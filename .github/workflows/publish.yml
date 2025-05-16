@@ -1,0 +1,51 @@
+name: Build and Push Authgate Services
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Get safe ref name
+        id: ref
+        run: echo "ref_name=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+
+      # Build and push authgate service
+      - name: Build and push authgate
+        uses: docker/build-push-action@v5
+        with:
+          context: ./authgate
+          file: ./authgate/Dockerfile
+          push: true
+          tags: |
+            authava/authgate:latest
+            authava/authgate:${{ steps.ref.outputs.ref_name }}
+
+      # Build and push authgate admin panel
+      - name: Build and push authgate-admin-ui
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin
+          file: ./admin/Dockerfile
+          push: true
+          tags: |
+            authava/authgate-admin-ui:latest
+            authava/authgate-admin-ui:${{ steps.ref.outputs.ref_name }}

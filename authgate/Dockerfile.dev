@@ -1,0 +1,29 @@
+FROM rust:1.86-slim AS dev
+
+ARG DATABASE_URL
+ENV DATABASE_URL=${DATABASE_URL}
+
+# Install system dependencies and useful dev tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev pkg-config openssl \
+    && cargo install cargo-watch \
+    && cargo install sqlx-cli --no-default-features --features postgres \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set up working dir and volume mount point
+WORKDIR /usr/src/authgate
+
+# Copy manifests first to prime cache
+COPY Cargo.toml Cargo.lock ./
+
+# Create a dummy main.rs to allow `cargo metadata` / `cargo check`
+RUN mkdir src && echo 'fn main() { println!("dummy"); }' > src/main.rs && cargo fetch
+
+# Copy rest of the source and migrations
+COPY . .
+
+# Run prepare to generate `.sqlx` directory (don't break build if it fails)
+RUN DATABASE_URL=${DATABASE_URL} sqlx prepare -- --lib || true
+
+# Dev command with cargo-watch
+CMD ["cargo", "watch", "-x", "run"]

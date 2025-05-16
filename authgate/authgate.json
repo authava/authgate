@@ -1,0 +1,52 @@
+{
+  "auth": {
+    "session_url": "https://authava.com/session",
+    "login_redirect": "https://authava.com/login"
+  },
+  "cookie_name": "session",
+  "routes": [
+    {
+      "host": "app.example.com",
+      "path": "/admin/*",
+      "require": {
+        "roles": ["admin"]
+      }
+    },
+    {
+      "host": "app.example.com",
+      "path": "/api/users/*",
+      "require": {
+        "permissions": ["users:read"]
+      }
+    },
+    {
+      "host": "*.client.example.com",
+      "path": "/",
+      "require": {
+        "teams": [
+          {
+            "id": "client-team-id",
+            "scopes": [
+              {
+                "resource_type": "client",
+                "action": "access"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "host": "dashboard.example.com",
+      "path": "/reports/*",
+      "require": {
+        "scopes": [
+          {
+            "resource_type": "report",
+            "action": "view"
+          }
+        ]
+      }
+    }
+  ]
+}

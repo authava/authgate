@@ -1,0 +1,117 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    command:
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.dev.acme.tlschallenge=true
+      - --certificatesresolvers.dev.acme.email=dev@authava.com
+      - --certificatesresolvers.dev.acme.storage=/letsencrypt/acme.json
+      - --serversTransport.insecureSkipVerify=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./letsencrypt:/letsencrypt
+    networks:
+      - authnet
+
+  authgate:
+    build:
+      context: ./authgate
+      dockerfile: Dockerfile.dev
+    command: ["cargo", "watch", "-x", "run"]
+    env_file: .env
+    ports:
+      - "4181:4181"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - AUTHGATE_CONFIG=/app/authgate.json
+    volumes:
+      - ./authgate:/usr/src/authgate
+    networks:
+      - authnet
+    expose:
+      - "4181"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.authgate.rule=Host(`admin.localhost`) && PathPrefix(`/admin`)"
+      - "traefik.http.routers.authgate.entrypoints=websecure"
+      - "traefik.http.routers.authgate.tls.certresolver=dev"
+      - "traefik.http.services.authgate.loadbalancer.server.port=4181"
+      - "traefik.http.routers.admin-api.middlewares=authgate-middleware"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    expose:
+      - "6379"
+    ports:
+      - "6379:6379"
+    networks:
+      - authnet
+
+  admin:
+    build:
+      context: ./admin
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./admin:/app
+    environment:
+      - VITE_API_URL=https://admin.localhost/admin
+    networks:
+      - authnet
+    expose:
+      - "5173"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.admin.rule=Host(`admin.localhost`)"
+      - "traefik.http.routers.admin.entrypoints=websecure"
+      - "traefik.http.routers.admin.tls.certresolver=dev"
+      - "traefik.http.services.admin.loadbalancer.server.port=5173"
+      - "traefik.http.routers.admin.middlewares=authgate-middleware"
+      - "traefik.http.middlewares.authgate-middleware.forwardauth.address=http://authgate:4181/auth"
+      - "traefik.http.middlewares.authgate-middleware.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.authgate-middleware.forwardauth.authResponseHeaders=X-Auth-User-Id,X-Auth-User-Email,X-Auth-User-Roles,X-Auth-User-Permissions"
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: authgate
+      POSTGRES_PASSWORD: devpassword
+      POSTGRES_DB: authgate
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    ports:
+      - "54322:5432"
+    networks:
+      - authnet
+
+  token-handoff:
+    image: authava/token-handoff
+    env_file: .env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.token-handoff.rule=Host(`admin.localhost`) && PathPrefix(`/auth`)"
+      - "traefik.http.routers.token-handoff.entrypoints=websecure"
+      - "traefik.http.routers.token-handoff.tls.certresolver=dev"
+      - "traefik.http.services.token-handoff.loadbalancer.server.port=3000"
+      - "traefik.http.services.token-handoff.loadbalancer.server.scheme=https"
+    networks:
+      - authnet
+
+networks:
+  authnet:
+    driver: bridge
+
+volumes:
+  pgdata:

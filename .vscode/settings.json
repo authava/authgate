@@ -1,0 +1,8 @@
+{
+    "workbench.colorTheme": "Default Dark Modern",
+    "workbench.startupEditor": "none",
+    "rust-analyzer.cargo.extraEnv": {
+        "DATABASE_URL": "postgres://authgate:devpassword@localhost:54322/authgate"
+    },
+    "rust-analyzer.checkOnSave.extraArgs": ["--features", "postgres"]
+}

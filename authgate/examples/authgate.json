@@ -1,0 +1,40 @@
+{
+  "auth": {
+    "session_url": "https://auth.example.com/session",
+    "login_redirect": "https://auth.example.com/login"
+  },
+  "cookie_name": "session",
+  "routes": [
+    {
+      "host": "app.example.com",
+      "path": "/admin/*",
+      "require": {
+        "roles": ["admin"]
+      }
+    },
+    {
+      "host": "app.example.com",
+      "path": "/api/users/*",
+      "require": {
+        "permissions": ["users:read"]
+      }
+    },
+    {
+      "host": "*.client.example.com",
+      "path": "/",
+      "require": {
+        "teams": [
+          {
+            "id": "client-team-id",
+            "scopes": [
+              {
+                "resource_type": "client",
+                "action": "access"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
