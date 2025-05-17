@@ -20,7 +20,6 @@ ENV SQLX_OFFLINE=true
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/src/authgate/target \
     cargo install sqlx-cli --no-default-features --features postgres && \
-    cargo sqlx prepare -- --lib && \
     cargo build --release && \
     cp target/release/authgate .
 
